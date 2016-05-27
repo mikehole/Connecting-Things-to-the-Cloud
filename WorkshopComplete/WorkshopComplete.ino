@@ -10,15 +10,15 @@
 
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
-const char *ssid = "SOMEWIFI";			// cannot be longer than 32 characters!
-const char *pass = "HIDDEN";		//
+const char *ssid = "workshop";			// cannot be longer than 32 characters!
+const char *pass = "workshop2016";		//
 
 //flag for saving data
 bool shouldSaveConfig = false;
 
 WiFiClient client;
 
-PubSubClient mqttclient(client, "broker.hivemq.com");
+PubSubClient mqttclient(client, "40.127.166.94");
 
 // Input / Output stuff
 // Witty Cloud Board specifc pins 
@@ -37,9 +37,7 @@ int		OldButtonState;
 
 String	ButtonFeedName;
 String	LdrFeedName;
-String	RedFeedName;
-String	GreenFeedName;
-String	BlueFeedName;
+String	RGBFeedName;
 
 //callback notifying us of the need to save config
 void saveConfigCallback() {
@@ -55,22 +53,23 @@ void callback(const MQTT::Publish& pub) {
 	Serial.print(") :");
 	Serial.println(pub.payload_string());
 
-	
+	long unsigned int rgb = strtoul(pub.payload_string().c_str(), 0, 16);
 
-	if (pub.topic() == RedFeedName)
-	{
-		analogWrite(RED, pub.payload_string().toInt());
-	}
+	int red = rgb >> 16;
 
-	if (pub.topic() == GreenFeedName)
-	{
-		analogWrite(GREEN, pub.payload_string().toInt());
-	}
+	int green = (rgb & 0x00ff00) >> 8;
 
-	if (pub.topic() == BlueFeedName)
-	{
-		analogWrite(BLUE, pub.payload_string().toInt());
-	}
+	int blue = (rgb & 0x0000ff);
+
+	Serial.write("RR : ");
+	Serial.println(red);
+	analogWrite(RED, red * 4);
+	Serial.write("GG : ");
+	Serial.println(green );
+	analogWrite(GREEN, green * 4);
+	Serial.write("BB : ");
+	Serial.println(blue);
+	analogWrite(BLUE, blue * 4);
 }
 
 void setup() {
@@ -85,13 +84,9 @@ void setup() {
 	pinMode(GREEN, OUTPUT);
 	pinMode(BLUE, OUTPUT);
 
-	ButtonFeedName =	"tecmarina/" + String(ESP.getChipId()) + "/feeds/button";
-	LdrFeedName =		"tecmarina/" + String(ESP.getChipId()) + "/feeds/ldr";
-
-	RedFeedName =		"tecmarina/" + String(ESP.getChipId()) + "/input/rgb/r";
-	GreenFeedName =		"tecmarina/" + String(ESP.getChipId()) + "/input/rgb/g";
-	BlueFeedName =		"tecmarina/" + String(ESP.getChipId()) + "/input/rgb/b";
-
+	ButtonFeedName	=	"tecmarina/" + String(ESP.getChipId()) + "/feeds/button";
+	LdrFeedName		=	"tecmarina/" + String(ESP.getChipId()) + "/feeds/ldr";
+	RGBFeedName		=	"tecmarina/" + String(ESP.getChipId()) + "/input/rgb";
 }
 
 void loop() {
@@ -104,10 +99,17 @@ void loop() {
 		WiFi.begin(ssid, pass);
 
 		while (WiFi.status() != WL_CONNECTED) {
+			analogWrite(RED, 1024);
 			delay(500);
 			Serial.print(".");
+			analogWrite(RED, 0);
+			delay(500);
 		}
 		Serial.println("");
+		analogWrite(RED, 0);
+		analogWrite(GREEN, 1024);
+		delay(500);
+		analogWrite(GREEN, 0);
 
 		Serial.println("WiFi connected");
 	}
@@ -115,21 +117,33 @@ void loop() {
 	if (WiFi.status() == WL_CONNECTED) {
 		if (!mqttclient.connected())
 		{
+			analogWrite(RED, 0);
+			analogWrite(GREEN, 0);
+			analogWrite(BLUE, 1024);
+
 			Serial.println("Connecting to MQTT server");
 
-			if (mqttclient.connect("witty")) {
+			if (mqttclient.connect("witty" + String(ESP.getChipId()))) {
+				delay(500);
+				analogWrite(BLUE, 0);
 
 				Serial.println("Connected to MQTT server");
 
 				mqttclient.set_callback(callback);
 
-				mqttclient.subscribe(RedFeedName);
-				mqttclient.subscribe(GreenFeedName);
-				mqttclient.subscribe(BlueFeedName);
+				mqttclient.subscribe(RGBFeedName);
+
+				analogWrite(GREEN, 1024);
+				delay(500);
+				analogWrite(GREEN, 0);
 
 			}
 			else
 			{
+				analogWrite(RED, 1024);
+				delay(500);
+				analogWrite(RED, 0);
+
 				Serial.println("Could not connect to MQTT server");
 			}
 		}
